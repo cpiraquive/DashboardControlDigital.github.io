@@ -1,0 +1,1410 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  LogOut, LayoutDashboard, List, PlusCircle, User, Clock, DollarSign, Target, BarChart, TrendingDown, CheckCircle, PauseCircle, XCircle, Users, Briefcase, Trash2, Edit, Check, ChevronUp, ChevronDown, Award
+} from 'lucide-react';
+
+// --- CONFIGURACIÓN Y MOCK DATA (SIMULACIÓN DE API) ---
+
+// Definición de roles y permisos
+const ROLES = {
+  ADMIN: 'Administrador', // Acceso total
+  MANAGER: 'Gerente de Proyecto', // Gestión de proyectos y reportes
+  MEMBER: 'Miembro de Equipo', // Solo vista y tareas asignadas (simulado)
+};
+
+// Estados posibles de los proyectos
+const PROJECT_STATUSES = ['Iniciado', 'En Progreso', 'En Pausa', 'Completado', 'Cancelado'];
+
+// MOCK para miembros de equipo y constantes de historias
+const MOCK_TEAM_MEMBERS = ['Ana Torres', 'Carlos Ruiz', 'Beatriz Soto', 'David Peña', 'Laura Gómez', 'Juan Pérez'];
+const STORY_PRIORITIES = ['Baja', 'Media', 'Alta', 'Crítica'];
+const STORY_STATUSES = ['Pendiente', 'En Desarrollo', 'En Revisión', 'Terminada'];
+const PBI_TYPES = ['Epic', 'Historia de Usuario', 'Tarea Técnica', 'Bug'];
+
+
+// Datos iniciales simulados (ACTUALIZADO con nuevos campos: description y totalEffort)
+const initialProjects = [
+  { id: 1, name: 'Plataforma PMV Core (Dashboard)', client: 'Interno', plannedStart: '2025-01-10', plannedEnd: '2025-06-30', budget: 150000, leader: 'Ana Torres', status: 'En Progreso', satisfaction: 0.85, effortCompleted: 75, totalEffort: 320, description: 'Desarrollo y mantenimiento de las funcionalidades centrales del Dashboard de Control Digital PMV.', },
+  { id: 2, name: 'Desarrollo App Móvil "QuickFix"', client: 'Cliente A S.A.', plannedStart: '2025-03-01', plannedEnd: '2025-08-15', budget: 90000, leader: 'Carlos Ruiz', status: 'En Progreso', satisfaction: 0.92, effortCompleted: 30, totalEffort: 500, description: 'Creación de una aplicación móvil para la gestión rápida de incidentes y soporte al cliente.', },
+  { id: 3, name: 'Reestructuración Financiera', client: 'Interno', plannedStart: '2025-02-20', plannedEnd: '2025-05-20', budget: 45000, leader: 'Beatriz Soto', status: 'Completado', satisfaction: 0.95, effortCompleted: 45, totalEffort: 180, description: 'Optimización de los procesos contables y de reporte interno para el cumplimiento de normativas.', },
+  { id: 4, name: 'Campaña Marketing Digital', client: 'Cliente B Ltda.', plannedStart: '2025-04-15', plannedEnd: '2025-06-15', budget: 30000, leader: 'David Peña', status: 'Iniciado', satisfaction: 0, effortCompleted: 0, totalEffort: 120, description: 'Diseño e implementación de una campaña de publicidad en redes sociales y Google Ads.', },
+];
+
+let nextId = initialProjects.length + 1;
+const getNextId = () => nextId++;
+
+// Datos iniciales simulados de Product Backlog Items (PBIs)
+// NOTA: Algunos PBIs tienen status 'Terminada' para simular Valor Entregado.
+const initialProductBacklog = [
+  // PBIs ORIGINALES
+  { id: 105, projectId: 4, title: 'Crear arte para anuncios de Instagram', description: 'Como encargado de marketing, necesito 5 banners atractivos para la campaña.', priority: 'Media', status: 'Terminada', effortPoints: 2, assignedTo: 'Laura Gómez', pbiType: 'Tarea Técnica', rank: 1, businessValue: 50 },
+  { id: 104, projectId: 1, title: 'Configurar VPC en AWS', description: 'Tarea técnica: Configurar la red privada virtual para el entorno de producción.', priority: 'Alta', status: 'Terminada', effortPoints: 3, assignedTo: 'David Peña', pbiType: 'Tarea Técnica', rank: 2, businessValue: 70 },
+  { id: 102, projectId: 2, title: 'Login con Google SSO', description: 'Como usuario, quiero poder iniciar sesión usando mi cuenta de Google para simplificar el acceso.', priority: 'Alta', status: 'Terminada', effortPoints: 5, assignedTo: 'Ana Torres', pbiType: 'Historia de Usuario', rank: 3, businessValue: 110 },
+  { id: 106, projectId: 1, title: 'Monitorización de Logs', description: 'Integrar sistema de monitoreo para logs de producción en la nube.', priority: 'Alta', status: 'Pendiente', effortPoints: 5, assignedTo: 'Juan Pérez', pbiType: 'Tarea Técnica', rank: 6, businessValue: 90 },
+  { id: 103, projectId: 2, title: 'Ver listado de incidentes', description: 'Como gerente, quiero ver una lista filtrable de todos los incidentes activos.', priority: 'Crítica', status: 'En Revisión', effortPoints: 8, assignedTo: 'Carlos Ruiz', pbiType: 'Historia de Usuario', rank: 8, businessValue: 120 },
+  { id: 101, projectId: 2, title: 'Epic: Módulo de Autenticación', description: 'Permite a los usuarios acceder de forma segura a la aplicación.', priority: 'Crítica', status: 'Pendiente', effortPoints: 21, assignedTo: 'Ana Torres', pbiType: 'Epic', rank: 16, businessValue: 150 },
+  
+  // NUEVOS PBIs SOLICITADOS (Integrados)
+  { id: 107, projectId: 1, title: 'US-08: Notificaciones Automáticas', description: 'Como Usuario, quiero recibir notificaciones automáticas de cambios importantes para mantenerme informado', priority: 'Media', status: 'Terminada', effortPoints: 3, assignedTo: 'Juan Pérez', pbiType: 'Historia de Usuario', rank: 4, businessValue: 60 },
+  { id: 108, projectId: 1, title: 'US-03: Autenticación con Roles y Permisos', description: 'Como Usuario del Sistema, requiero autenticación segura con roles y permisos para proteger la información sensible', priority: 'Alta', status: 'Pendiente', effortPoints: 5, assignedTo: 'Ana Torres', pbiType: 'Historia de Usuario', rank: 5, businessValue: 90 },
+  { id: 109, projectId: 1, title: 'US-06: Gestión de Tareas con Estados', description: 'Como Equipo de Proyecto, necesito gestionar tareas con estados y prioridades para mantener el flujo de trabajo organizado', priority: 'Media', status: 'Pendiente', effortPoints: 5, assignedTo: 'Carlos Ruiz', pbiType: 'Historia de Usuario', rank: 7, businessValue: 75 },
+  { id: 110, projectId: 1, title: 'US-10: Respaldos Automáticos del Sistema', description: 'Como Administrador, requiero realizar respaldos automáticos del sistema para garantizar la continuidad del negocio', priority: 'Baja', status: 'Pendiente', effortPoints: 3, assignedTo: 'David Peña', pbiType: 'Historia de Usuario', rank: 9, businessValue: 40 },
+  { id: 111, projectId: 1, title: 'US-01: Dashboard Ejecutivo con KPIs', description: 'Como Gerente General, quiero visualizar un dashboard ejecutivo con KPIs en tiempo real para tomar decisiones informadas sobre el portafolio de proyectos', priority: 'Alta', status: 'Pendiente', effortPoints: 8, assignedTo: 'Beatriz Soto', pbiType: 'Historia de Usuario', rank: 10, businessValue: 100 },
+  { id: 112, projectId: 1, title: 'US-11: Exportar Datos a Excel/PDF', description: 'Como Usuario, deseo exportar datos a formatos Excel/PDF para análisis externos', priority: 'Baja', status: 'Pendiente', effortPoints: 3, assignedTo: 'Laura Gómez', pbiType: 'Historia de Usuario', rank: 11, businessValue: 35 },
+  { id: 113, projectId: 1, title: 'US-09: Generación de Reportes Automáticos', description: 'Como Gerente de Proyecto, necesito generar reportes automáticos de avance para presentar a los stakeholders', priority: 'Media', status: 'Pendiente', effortPoints: 5, assignedTo: 'Ana Torres', pbiType: 'Historia de Usuario', rank: 12, businessValue: 55 },
+  { id: 114, projectId: 1, title: 'US-04: Asignación y Disponibilidad de Recursos', description: 'Como Líder de Proyecto, necesito asignar recursos y visualizar su disponibilidad para optimizar la distribución del equipo', priority: 'Alta', status: 'Pendiente', effortPoints: 8, assignedTo: 'Carlos Ruiz', pbiType: 'Historia de Usuario', rank: 13, businessValue: 85 },
+  { id: 115, projectId: 1, title: 'US-05: Monitoreo de Presupuesto en Tiempo Real', description: 'Como Gerente de Proyecto, quiero registrar y monitorear el presupuesto en tiempo real para evitar sobrecostos', priority: 'Alta', status: 'Pendiente', effortPoints: 8, assignedTo: 'Beatriz Soto', pbiType: 'Historia de Usuario', rank: 14, businessValue: 85 },
+  { id: 116, projectId: 1, title: 'US-02: Gestión de Proyectos con WBS', description: 'Como Líder de Proyecto, necesito crear y gestionar proyectos con estructura WBS para organizar mejor las actividades', priority: 'Alta', status: 'Pendiente', effortPoints: 13, assignedTo: 'David Peña', pbiType: 'Historia de Usuario', rank: 15, businessValue: 95 },
+  { id: 117, projectId: 1, title: 'US-07: Módulo de Gestión de Cambios', description: 'Como Líder de Proyecto, requiero un módulo de gestión de cambios para controlar las modificaciones del alcance', priority: 'Media', status: 'Pendiente', effortPoints: 13, assignedTo: 'Laura Gómez', pbiType: 'Historia de Usuario', rank: 17, businessValue: 70 },
+  { id: 118, projectId: 1, title: 'US-12: Integración con Herramientas Existentes', description: 'Como Equipo de Proyecto, quiero integración con herramientas existentes (correo, calendario) para centralizar la comunicación', priority: 'Baja', status: 'Pendiente', effortPoints: 8, assignedTo: 'Juan Pérez', pbiType: 'Historia de Usuario', rank: 18, businessValue: 30 },
+];
+
+let nextPbiId = initialProductBacklog.length + 101;
+const getNextPbiId = () => nextPbiId++;
+
+
+// --- COMPONENTES DE UI ---
+
+// Componente para tarjetas de KPIs
+const KPICard = ({ title, value, icon: Icon, colorClass, tooltip }) => (
+  <div className="bg-white p-5 rounded-xl shadow-lg border border-gray-100 transition-shadow duration-300 hover:shadow-xl w-full">
+    <div className={`flex items-center justify-between mb-3 text-${colorClass}-600`}>
+      <Icon className="w-8 h-8" />
+      <span className="text-sm font-medium text-gray-500" title={tooltip}>{title}</span>
+    </div>
+    <p className="text-3xl font-bold text-gray-900">{value}</p>
+  </div>
+);
+
+// Componente para barras de gráfico simplificado
+const ChartBar = ({ label, value, max, color, unit = '%' }) => (
+  <div className="mb-2">
+    <div className="flex justify-between text-xs text-gray-600">
+      <span>{label}</span>
+      <span>{value}{unit}</span>
+    </div>
+    <div className="w-full bg-gray-200 rounded-full h-2.5">
+      <div className={`h-2.5 rounded-full ${color}`} style={{ width: `${Math.min(value, max)}%` }}></div>
+    </div>
+  </div>
+);
+
+// Componente de Semáforo de Estado de Proyecto
+const StatusSemaphore = ({ status }) => {
+  const baseClasses = "w-3 h-3 rounded-full mr-2";
+  let color = 'bg-gray-400';
+  let label = status;
+
+  switch (status) {
+    case 'Completado':
+      color = 'bg-green-500';
+      break;
+    case 'En Progreso':
+      color = 'bg-yellow-500 animate-pulse';
+      break;
+    case 'Iniciado':
+      color = 'bg-blue-500';
+      break;
+    case 'En Pausa':
+      color = 'bg-orange-500';
+      break;
+    case 'Cancelado':
+      color = 'bg-red-500';
+      break;
+    default:
+      color = 'bg-gray-400';
+      break;
+  }
+
+  return (
+    <div className="flex items-center text-sm">
+      <div className={`${baseClasses} ${color}`}></div>
+      <span>{label}</span>
+    </div>
+  );
+};
+
+// Componente para Badge de Prioridad de Historia
+const PriorityBadge = ({ priority }) => {
+  let color = 'bg-gray-200 text-gray-700';
+  switch (priority) {
+    case 'Crítica':
+      color = 'bg-red-500 text-white';
+      break;
+    case 'Alta':
+      color = 'bg-orange-500 text-white';
+      break;
+    case 'Media':
+      color = 'bg-yellow-400 text-gray-800';
+      break;
+    case 'Baja':
+      color = 'bg-blue-400 text-white';
+      break;
+    default:
+        color = 'bg-gray-200 text-gray-700';
+        break;
+  }
+  return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>{priority}</span>;
+};
+
+// Componente para Badge de Tipo de PBI
+const TypeBadge = ({ type }) => {
+    let color = 'bg-gray-200 text-gray-700';
+    let label = type;
+    switch (type) {
+        case 'Epic':
+            color = 'bg-purple-600 text-white';
+            break;
+        case 'Historia de Usuario':
+            color = 'bg-teal-500 text-white';
+            break;
+        case 'Bug':
+            color = 'bg-red-700 text-white';
+            break;
+        case 'Tarea Técnica':
+            color = 'bg-blue-500 text-white';
+            break;
+    }
+    return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>;
+};
+
+// Componente Modal de Confirmación Personalizado (Reemplaza a window.confirm)
+const ConfirmationModal = ({ title, message, isOpen, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+        <h3 className="text-xl font-bold mb-4 text-red-600 flex items-center"><Trash2 className="w-5 h-5 mr-2"/> {title}</h3>
+        <p className="text-gray-700 mb-6">{message}</p>
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition duration-150"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-150"
+          >
+            Confirmar Eliminación
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- VISTAS DEL PMV ---
+
+// 4.2.1 Dashboard Ejecutivo
+const DashboardExecutive = ({ projects, productBacklog }) => {
+  // Cálculo de KPIs Críticos (Simulados)
+  const stats = useMemo(() => {
+    const totalProjects = projects.length;
+    const completedProjects = projects.filter(p => p.status === 'Completado').length;
+    const inProgressProjects = projects.filter(p => p.status === 'En Progreso').length;
+
+    // Desviación presupuestaria promedio (Simulación: 3% de desviación positiva/negativa para no completados)
+    const budgetDeviationSum = projects.reduce((sum, p) => {
+      if (p.status !== 'Completado' && p.budget > 0) {
+        // Simular una desviación del 3% (ejemplo)
+        return sum + (p.budget * 0.03); 
+      }
+      return sum;
+    }, 0);
+    const avgBudgetDeviation = totalProjects > 0 ? (budgetDeviationSum / totalProjects).toFixed(0) : 0;
+
+    // Índice de satisfacción del cliente promedio
+    const avgSatisfaction = totalProjects > 0
+      ? (projects.reduce((sum, p) => sum + p.satisfaction, 0) / totalProjects).toFixed(2)
+      : 0;
+
+    // Utilización de recursos (Simulación: Proyectos en progreso/total * 80%)
+    const resourceUtilization = totalProjects > 0
+      ? ((inProgressProjects / totalProjects) * 0.8 * 100).toFixed(0)
+      : 0;
+      
+    // % Proyectos a tiempo (Simulación simple: 70% de los proyectos activos)
+    const onTimeRate = (projects.filter(p => p.status !== 'Completado').length * 0.7 / totalProjects * 100).toFixed(0);
+
+    // Esfuerzo Total (Story Points)
+    const totalStoryPoints = productBacklog.reduce((sum, s) => sum + s.effortPoints, 0);
+    const completedStoryPoints = productBacklog.filter(s => s.status === 'Terminada').reduce((sum, s) => sum + s.effortPoints, 0);
+    const completionRate = totalStoryPoints > 0 ? ((completedStoryPoints / totalStoryPoints) * 100).toFixed(0) : 0;
+    
+    // Valor total potencial (todos los PBIs)
+    const totalPotentialValue = productBacklog.reduce((sum, s) => sum + s.businessValue, 0);
+    // Valor total entregado (PBIs terminados)
+    const totalDeliveredValue = productBacklog.filter(s => s.status === 'Terminada').reduce((sum, s) => sum + s.businessValue, 0);
+
+    // Burndown Chart (Simulación)
+    const burndownData = [
+      { day: 'D1', planned: 20, actual: 18 },
+      { day: 'D2', planned: 18, actual: 16 },
+      { day: 'D3', planned: 16, actual: 14 },
+      { day: 'D4', planned: 14, actual: 12 },
+      { day: 'D5', planned: 12, actual: 10 },
+    ];
+
+    return {
+      totalProjects,
+      completedProjects,
+      onTimeRate,
+      avgBudgetDeviation,
+      avgSatisfaction,
+      resourceUtilization,
+      burndownData,
+      totalStoryPoints,
+      completionRate,
+      totalDeliveredValue,
+      totalPotentialValue
+    };
+  }, [projects, productBacklog]);
+  
+  // Distribución de recursos (ejemplo de datos)
+  const resourceDistribution = [
+    { name: 'Desarrollo', allocation: 45 },
+    { name: 'Diseño UX', allocation: 15 },
+    { name: 'QA/Testing', allocation: 20 },
+    { name: 'Gestión', allocation: 20 },
+  ];
+
+  return (
+    <div className="p-4 md:p-8">
+      <h2 className="text-3xl font-bold mb-6 text-gray-800">Dashboard Ejecutivo</h2>
+
+      {/* Vista General de Portafolio: KPIs Críticos en Tiempo Real */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 mb-10">
+        <KPICard title="Proyectos Totales" value={stats.totalProjects} icon={Briefcase} colorClass="blue" tooltip="Total de proyectos activos e inactivos"/>
+        <KPICard title="% Tareas Completadas (SP)" value={`${stats.completionRate}%`} icon={Check} colorClass="indigo" tooltip="Porcentaje de esfuerzo (Story Points) completado en el Backlog"/>
+        <KPICard title="Valor Entregado" value={stats.totalDeliveredValue.toLocaleString()} icon={Award} colorClass="green" tooltip="Suma de Business Value de PBIs terminados"/>
+        <KPICard title="% A Tiempo" value={`${stats.onTimeRate}%`} icon={Clock} colorClass="yellow" tooltip="Porcentaje de proyectos que cumplen el cronograma"/>
+        <KPICard title="Desv. Presup." value={`$${stats.avgBudgetDeviation}`} icon={TrendingDown} colorClass="red" tooltip="Desviación presupuestaria promedio de proyectos en curso"/>
+        <KPICard title="Satisfacción Cliente" value={`${(stats.avgSatisfaction * 100).toFixed(0)}%`} icon={Target} colorClass="purple" tooltip="Índice de satisfacción del cliente promedio (CSAT)"/>
+      </div>
+
+      {/* Gráficos Interactivos */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Gráfico 1: Burndown Chart Simplificado (Simulación) */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center"><BarChart className="w-5 h-5 mr-2 text-blue-500"/> Burndown Chart (Sprint Actual)</h3>
+          <p className="text-sm text-gray-500 mb-4">Muestra la comparación de esfuerzo planificado vs. esfuerzo real restante (ejemplo simulado de 5 días)</p>
+          <div className="h-64 relative">
+            <div className="absolute inset-0 p-4 border rounded-lg bg-gray-50 flex flex-col justify-end">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>20</span><span>15</span><span>10</span><span>5</span><span>0</span>
+                </div>
+                <div className="w-full h-40 relative">
+                    {/* Línea Planificada (Azul) */}
+                    <svg className="w-full h-full absolute" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <polyline fill="none" stroke="#3b82f6" strokeWidth="1.5" points="0,90 25,65 50,40 75,15 100,5" />
+                    </svg>
+                    {/* Línea Real (Rojo) */}
+                    <svg className="w-full h-full absolute" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <polyline fill="none" stroke="#ef4444" strokeWidth="1.5" points="0,85 25,60 50,45 75,20 100,10" />
+                    </svg>
+                    {/* Ejes X (Días) */}
+                    <div className="flex justify-between w-full absolute bottom-0 text-xs text-gray-600">
+                        {stats.burndownData.map((d, i) => <span key={i} className="w-[19%] text-center">{d.day}</span>)}
+                    </div>
+                </div>
+            </div>
+            <div className="flex justify-end text-sm mt-2">
+                <span className="flex items-center mr-4"><div className="w-3 h-3 bg-blue-500 rounded-full mr-1"></div> Planificado</span>
+                <span className="flex items-center"><div className="w-3 h-3 bg-red-500 rounded-full mr-1"></div> Real</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfico 2: Distribución de Recursos (Simulación) */}
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center"><Users className="w-5 h-5 mr-2 text-purple-500"/> Distribución de Recursos</h3>
+          <p className="text-sm text-gray-500 mb-6">Asignación de recursos por categoría del portafolio.</p>
+          <div className="space-y-4">
+            {resourceDistribution.map((item, index) => (
+              <ChartBar
+                key={index}
+                label={item.name}
+                value={item.allocation}
+                max={100}
+                color={index % 2 === 0 ? 'bg-indigo-500' : 'bg-pink-500'}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      
+      {/* Timeline de proyectos (Gantt simplificado) - Vista General de Portafolio */}
+      <div className="mt-8 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center"><Clock className="w-5 h-5 mr-2 text-yellow-600"/> Cronograma de Proyectos (Timeline Simplificado)</h3>
+          <div className="space-y-4">
+            {projects.map(p => (
+              <div key={p.id} className="border-l-4 border-gray-200 pl-4 py-2 hover:bg-gray-50 transition duration-150 rounded-md">
+                <div className="flex justify-between items-start">
+                  <div className="font-semibold text-gray-900">{p.name}</div>
+                  <StatusSemaphore status={p.status} />
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {p.plannedStart} - {p.plannedEnd}
+                </div>
+              </div>
+            ))}
+          </div>
+      </div>
+    </div>
+  );
+};
+
+// 4.2.5 Módulo de Reportes de Valor y Avance (NUEVA VISTA)
+const ValueReports = ({ projects, productBacklog }) => {
+    
+    // 1. Calcular el Valor Entregado por PBI
+    const deliveredValuePbis = productBacklog.filter(pbi => pbi.status === 'Terminada' && pbi.businessValue > 0);
+
+    // 2. Agrupar el valor entregado por Proyecto
+    const valueByProject = useMemo(() => {
+        const valueMap = {};
+        const effortMap = {};
+        let totalDeliveredValue = 0;
+        let totalPotentialValue = 0;
+
+        // Inicializar mapas y calcular valores totales
+        projects.forEach(p => {
+            valueMap[p.id] = { name: p.name, deliveredValue: 0, potentialValue: 0, deliveredEffort: 0, totalEffort: 0 };
+        });
+
+        // Sumar valor entregado y potencial
+        productBacklog.forEach(pbi => {
+            if (valueMap[pbi.projectId]) {
+                const isDelivered = pbi.status === 'Terminada';
+                
+                // Valor Potencial (todos los PBIs del proyecto)
+                valueMap[pbi.projectId].potentialValue += pbi.businessValue;
+                totalPotentialValue += pbi.businessValue;
+
+                // Valor Entregado (PBIs terminados)
+                if (isDelivered) {
+                    valueMap[pbi.projectId].deliveredValue += pbi.businessValue;
+                    totalDeliveredValue += pbi.businessValue;
+                    valueMap[pbi.projectId].deliveredEffort += pbi.effortPoints;
+                }
+                
+                valueMap[pbi.projectId].totalEffort += pbi.effortPoints;
+            }
+        });
+        
+        const projectReports = Object.values(valueMap).map(report => ({
+            ...report,
+            completionRate: report.totalEffort > 0 ? ((report.deliveredEffort / report.totalEffort) * 100).toFixed(1) : 0,
+            valueDeliveryRate: report.potentialValue > 0 ? ((report.deliveredValue / report.potentialValue) * 100).toFixed(1) : 0,
+        })).sort((a, b) => b.deliveredValue - a.deliveredValue); // Ordenar por valor entregado
+
+        return {
+            totalDeliveredValue,
+            totalPotentialValue,
+            projectReports
+        };
+    }, [projects, productBacklog]);
+    
+    const { totalDeliveredValue, totalPotentialValue, projectReports } = valueByProject;
+    
+    const overallValueRate = totalPotentialValue > 0 ? ((totalDeliveredValue / totalPotentialValue) * 100).toFixed(1) : 0;
+    
+    return (
+        <div className="p-4 md:p-8">
+            <h2 className="text-3xl font-bold mb-6 text-gray-800">Reportes de Valor y Avance</h2>
+            <p className="text-gray-600 mb-8">Análisis de la entrega de valor de negocio a nivel de portafolio y proyecto, basado en los PBIs terminados.</p>
+            
+            {/* KPI Principal */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <KPICard title="Valor Total Entregado" value={totalDeliveredValue.toLocaleString()} icon={Award} colorClass="green" tooltip="Suma del Business Value de PBIs terminados en todo el portafolio"/>
+                <KPICard title="Valor Potencial Total" value={totalPotentialValue.toLocaleString()} icon={Target} colorClass="indigo" tooltip="Suma del Business Value de todos los PBIs en el Backlog"/>
+                <KPICard title="% Tasa de Entrega de Valor" value={`${overallValueRate}%`} icon={CheckCircle} colorClass="blue" tooltip="Valor Entregado / Valor Potencial"/>
+            </div>
+
+            {/* Gráfico de Valor Entregado por Proyecto */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 mb-8">
+                <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center"><DollarSign className="w-5 h-5 mr-2 text-green-600"/> Valor Entregado por Proyecto (Unidades de Valor)</h3>
+                <p className="text-sm text-gray-500 mb-6">Comparación del valor de negocio entregado por cada proyecto activo o completado.</p>
+                
+                <div className="space-y-4">
+                    {projectReports.map((report, index) => (
+                        <div key={index} className="border p-4 rounded-lg bg-gray-50">
+                            <h4 className="font-bold text-gray-800 mb-2">{report.name}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold text-green-700">Valor Entregado: {report.deliveredValue.toLocaleString()}</p>
+                                    <ChartBar
+                                        label={`% Entrega de Valor (${report.valueDeliveryRate}%)`}
+                                        value={Number(report.valueDeliveryRate)}
+                                        max={100}
+                                        color={'bg-green-500'}
+                                        unit='%'
+                                    />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-indigo-700">Esfuerzo Completado: {report.deliveredEffort} SP</p>
+                                    <ChartBar
+                                        label={`% Avance de Esfuerzo (${report.completionRate}%)`}
+                                        value={Number(report.completionRate)}
+                                        max={100}
+                                        color={'bg-indigo-500'}
+                                        unit='%'
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            
+            {/* Detalle de PBIs que contribuyeron al valor */}
+            <div className="mt-8 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center"><List className="w-5 h-5 mr-2 text-teal-600"/> PBIs Terminados (Fuente de Valor)</h3>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PBI</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proyecto</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SP</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {deliveredValuePbis.map(pbi => (
+                                <tr key={pbi.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pbi.title}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{projects.find(p => p.id === pbi.projectId)?.name || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">{pbi.businessValue}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-indigo-600">{pbi.effortPoints}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                {deliveredValuePbis.length === 0 && (
+                    <div className="text-center py-5 text-gray-500">Ningún PBI ha sido marcado como "Terminado" para generar valor.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// 4.2.2 Módulo de Gestión Básica de Proyectos - Formulario (Sin cambios funcionales mayores)
+const ProjectForm = ({ projectToEdit, onSave, onCancel }) => {
+  const [formData, setFormData] = useState(projectToEdit || {
+    name: '', client: '', plannedStart: '', plannedEnd: '', budget: '', leader: '', status: 'Iniciado', 
+    description: '', totalEffort: '',
+  });
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+    onCancel(); // Cerrar formulario después de guardar
+  };
+
+  const isEditing = !!projectToEdit;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
+        <h3 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">{isEditing ? 'Editar Proyecto' : 'Crear Nuevo Proyecto'}</h3>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          
+          {/* SECCIÓN 1: INFORMACIÓN GENERAL */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-blue-600 border-l-4 border-blue-500 pl-3">1. Datos Generales</h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
+              <input type="text" name="name" value={formData.name} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Líder de Proyecto</label>
+              <input type="text" name="leader" value={formData.leader} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Cliente (Interno/Externo)</label>
+              <input type="text" name="client" value={formData.client} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Estado del Proyecto</label>
+              <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                {PROJECT_STATUSES.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* SECCIÓN 2: PLANIFICACIÓN Y ESFUERZO (WBS) */}
+          <div className="space-y-4 pt-4 border-t border-gray-200">
+             <h4 className="text-lg font-semibold text-blue-600 border-l-4 border-blue-500 pl-3">2. Alcance y Esfuerzo</h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Objetivos y Alcance (Descripción)</label>
+              <textarea name="description" value={formData.description} onChange={handleChange} rows="3" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Breve resumen de objetivos y límites del proyecto (similar a Hoja 1)"></textarea>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Esfuerzo Total Estimado (Horas)</label>
+                <input type="number" name="totalEffort" value={formData.totalEffort} onChange={handleChange} required min="1" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500" />
+                <p className="text-xs text-gray-500 mt-1">Total de horas según el WBS de la plantilla.</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* SECCIÓN 3: TIEMPO Y FINANZAS */}
+          <div className="space-y-4 pt-4 border-t border-gray-200">
+            <h4 className="text-lg font-semibold text-blue-600 border-l-4 border-blue-500 pl-3">3. Cronograma y Presupuesto</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Fecha Inicio Planificada</label>
+                <input type="date" name="plannedStart" value={formData.plannedStart} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Fecha Fin Planificada</label>
+                <input type="date" name="plannedEnd" value={formData.plannedEnd} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Presupuesto Asignado ($)</label>
+              <input type="number" name="budget" value={formData.budget} onChange={handleChange} required min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t mt-6">
+            <button type="button" onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition duration-150">Cancelar</button>
+            <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150">
+              {isEditing ? 'Guardar Cambios' : 'Crear Proyecto'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// 4.2.2 Módulo de Gestión Básica de Proyectos - Listado (Sin cambios funcionales mayores)
+const ProjectList = ({ projects, role, onEditProject, onDeleteProject }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('Todos');
+
+  const canManage = role === ROLES.ADMIN || role === ROLES.MANAGER;
+
+  // Filtrado y Búsqueda
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          project.leader.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'Todos' || project.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="p-4 md:p-8">
+      <h2 className="text-3xl font-bold mb-6 text-gray-800">Gestión de Proyectos</h2>
+
+      {/* Controles de Búsqueda y Filtro */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6 bg-white p-4 rounded-xl shadow-md">
+        <input
+          type="text"
+          placeholder="Buscar por nombre o líder..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="flex-grow border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 md:w-48"
+        >
+          <option value="Todos">Filtrar por Estado</option>
+          {PROJECT_STATUSES.map(status => (
+            <option key={status} value={status}>{status}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Vista Tabular */}
+      <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Cliente</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Presupuesto</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Líder</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+              {canManage && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredProjects.map((project) => (
+              <tr key={project.id} className="hover:bg-gray-50 transition duration-150">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{project.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{project.client}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">${project.budget.toLocaleString()}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{project.leader}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <StatusSemaphore status={project.status} />
+                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button
+                      onClick={() => onEditProject(project)}
+                      className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      title="Editar"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => onDeleteProject(project.id)}
+                      className="text-red-600 hover:text-red-900"
+                      title="Eliminar"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredProjects.length === 0 && (
+          <div className="text-center py-10 text-gray-500">No se encontraron proyectos.</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Componente Modal para crear/editar Product Backlog Items (PBI Form)
+const PbiForm = ({ pbiToEdit, projects, onSave, onCancel }) => {
+  const [formData, setFormData] = useState(pbiToEdit || {
+    projectId: projects[0]?.id || '',
+    title: '', description: '', priority: 'Media', status: 'Pendiente', effortPoints: 1, assignedTo: '',
+    pbiType: 'Historia de Usuario', 
+    rank: pbiToEdit?.rank || 999, 
+    businessValue: pbiToEdit?.businessValue || 50, // Nuevo campo
+  });
+
+  const handleChange = (e) => {
+    const { name, value, type } = e.target;
+    // Manejar inputs numéricos
+    const newValue = (type === 'number') ? (value === '' ? '' : Number(value)) : value;
+    setFormData(prev => ({ ...prev, [name]: newValue }));
+  };
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({ 
+      ...formData,
+      // Asegurar que ID del proyecto, Story Points, Rank y Value sean números
+      projectId: Number(formData.projectId),
+      effortPoints: Number(formData.effortPoints),
+      rank: Number(formData.rank),
+      businessValue: Number(formData.businessValue), // Asegurar que sea número
+    });
+  };
+
+  const isEditing = !!pbiToEdit;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md overflow-y-auto max-h-[90vh]">
+        <h3 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">{isEditing ? 'Editar PBI' : 'Crear Nuevo PBI'}</h3>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Proyecto Asociado</label>
+            <select name="projectId" value={formData.projectId} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Tipo de PBI</label>
+              <select name="pbiType" value={formData.pbiType} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                {PBI_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Título del PBI</label>
+              <input type="text" name="title" value={formData.title} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Descripción (Alcance)</label>
+            <textarea name="description" value={formData.description} onChange={handleChange} rows="3" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+          </div>
+
+          <div className="grid grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Prioridad</label>
+              <select name="priority" value={formData.priority} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                {STORY_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Story Points (Esfuerzo)</label>
+              <input type="number" name="effortPoints" value={formData.effortPoints} onChange={handleChange} required min="1" max="21" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Valor Negocio</label>
+              <input type="number" name="businessValue" value={formData.businessValue} onChange={handleChange} required min="1" max="1000" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Estado</label>
+              <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                {STORY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Asignado a</label>
+            <select name="assignedTo" value={formData.assignedTo} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+              <option value="">(Sin asignar)</option>
+              {MOCK_TEAM_MEMBERS.map(member => <option key={member} value={member}>{member}</option>)}
+            </select>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t mt-6">
+            <button type="button" onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition duration-150">Cancelar</button>
+            <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150">
+              {isEditing ? 'Guardar Cambios' : 'Crear PBI'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// 4.2.4 Módulo de Product Backlog Management
+const ProductBacklogManagement = ({ productBacklog, projects, role, onEditPbi, onDeletePbi, onCreatePbiClick, onReorderPbi }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterProject, setFilterProject] = useState('Todos');
+  const [filterType, setFilterType] = useState('Todos');
+
+  // Solo el Admin y Manager (simulando PO) pueden gestionar la prioridad
+  const canManageBacklog = role === ROLES.ADMIN || role === ROLES.MANAGER; 
+
+  // Mapa de Proyectos para obtener el nombre
+  const projectMap = useMemo(() => {
+    return projects.reduce((acc, p) => {
+      acc[p.id] = p.name;
+      return acc;
+    }, {});
+  }, [projects]);
+
+  // Filtrado y Ordenamiento
+  const filteredAndRankedBacklog = useMemo(() => {
+    return productBacklog
+      .filter(pbi => {
+        const matchesSearch = pbi.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              pbi.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              pbi.assignedTo.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesProject = filterProject === 'Todos' || pbi.projectId === Number(filterProject);
+        const matchesType = filterType === 'Todos' || pbi.pbiType === filterType;
+        return matchesSearch && matchesProject && matchesType;
+      })
+      .sort((a, b) => a.rank - b.rank); // Ordenar por rank (el número más bajo es el más alto en prioridad)
+  }, [productBacklog, searchTerm, filterProject, filterType]);
+  
+  // Función para calcular y mostrar el Ratio Valor/Esfuerzo
+  const calculateRatio = (value, effort) => {
+      if (effort === 0 || !effort) return 'N/A';
+      return (value / effort).toFixed(2);
+  }
+
+  return (
+    <div className="p-4 md:p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Product Backlog</h2>
+        {canManageBacklog && (
+          <button
+            onClick={onCreatePbiClick}
+            className="flex items-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150"
+          >
+            <PlusCircle className="w-5 h-5 mr-2" />
+            Crear PBI
+          </button>
+        )}
+      </div>
+
+      {/* Controles de Búsqueda y Filtro */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6 bg-white p-4 rounded-xl shadow-md">
+        <input
+          type="text"
+          placeholder="Buscar por título o responsable..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="flex-grow border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+        <select
+          value={filterProject}
+          onChange={(e) => setFilterProject(e.target.value)}
+          className="border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 md:w-56"
+        >
+          <option value="Todos">Filtrar por Proyecto</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 md:w-56"
+        >
+          <option value="Todos">Filtrar por Tipo</option>
+          {PBI_TYPES.map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+      </div>
+      
+      {/* Vista de Lista (Tabla) - Enfocada en el Ranking */}
+      <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              {canManageBacklog && <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>}
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID / PBI</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proyecto</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SP</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ratio (V/SP)</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asignado</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+              {canManageBacklog && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredAndRankedBacklog.map((pbi, index) => (
+              <tr key={pbi.id} className="hover:bg-gray-50 transition duration-150">
+                {/* Columna de Ranking y Controles */}
+                {canManageBacklog && (
+                    <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-900 bg-gray-50 border-r">
+                        <div className="flex flex-col items-center">
+                            {/* Botón Arriba */}
+                            <button
+                                onClick={() => onReorderPbi(pbi.id, 'up')}
+                                disabled={index === 0}
+                                className="p-1 text-gray-500 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-500"
+                            >
+                                <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <span className="text-lg text-indigo-700">{pbi.rank}</span>
+                            {/* Botón Abajo */}
+                            <button
+                                onClick={() => onReorderPbi(pbi.id, 'down')}
+                                disabled={index === filteredAndRankedBacklog.length - 1}
+                                className="p-1 text-gray-500 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-500"
+                            >
+                                <ChevronDown className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </td>
+                )}
+                {/* Resto de las Columnas */}
+                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                    <span className="text-xs text-gray-500 block">#{pbi.id}</span>
+                    <span title={pbi.description}>{pbi.title}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <TypeBadge type={pbi.pbiType} />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{projectMap[pbi.projectId]}</td>
+                <td className="px-6 py-4 whitespace-nowrap"><PriorityBadge priority={pbi.priority} /></td>
+                <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-semibold text-green-600">{pbi.businessValue}</td>
+                <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-semibold text-indigo-600">{pbi.effortPoints}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-700">{calculateRatio(pbi.businessValue, pbi.effortPoints)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pbi.assignedTo || 'N/A'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{pbi.status}</td>
+                {canManageBacklog && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button
+                      onClick={() => onEditPbi(pbi)}
+                      className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      title="Editar"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDeletePbi(pbi.id)}
+                      className="text-red-600 hover:text-red-900"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredAndRankedBacklog.length === 0 && (
+          <div className="text-center py-10 text-gray-500">No se encontraron ítems de Backlog.</div>
+        )}
+      </div>
+      
+      {canManageBacklog && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+              <span className="font-semibold">Nota para el PO/Gerente:</span> El **Rank** se basa en el índice Valor de Negocio / Story Points, lo que refleja el principio de **"mayor valor por menor esfuerzo"**. Utilice los botones de flecha para gestionar el orden de forma interactiva.
+          </div>
+      )}
+    </div>
+  );
+};
+
+
+// Layout Principal con Menú de Navegación
+const DashboardLayout = ({ children, user, handleLogout, currentView, setCurrentView, onCreateProjectClick, onCreatePbiClick, canCreateProject }) => {
+  const navItems = [
+    { name: 'Dashboard Ejecutivo', icon: LayoutDashboard, view: 'dashboard' },
+    { name: 'Gestión de Proyectos', icon: List, view: 'projects' },
+    { name: 'Product Backlog', icon: Target, view: 'backlog' },
+    { name: 'Reportes de Valor', icon: BarChart, view: 'reports' }, // NUEVO ÍTEM
+  ];
+
+  const canCreatePbi = user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
+
+  return (
+    <div className="flex h-screen bg-gray-100 font-sans">
+      
+      {/* Sidebar de Navegación */}
+      <aside className="w-64 bg-gray-900 text-white flex-shrink-0 flex flex-col hidden md:block">
+        <div className="p-6 text-xl font-bold text-blue-400 border-b border-gray-800">InnovaPyme PMV</div>
+        <nav className="flex-grow p-4">
+          <ul className="space-y-2">
+            {navItems.map(item => (
+              <li key={item.view}>
+                <a
+                  href="#"
+                  onClick={() => setCurrentView(item.view)}
+                  className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                    currentView === item.view ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-800 text-gray-300'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        
+        <div className="p-4 border-t border-gray-800">
+            <div className="flex items-center mb-4">
+                <User className="w-5 h-5 mr-3 text-blue-400" />
+                <div>
+                    <p className="text-sm font-semibold">{user.username}</p>
+                    <p className="text-xs text-gray-400">{user.role}</p>
+                </div>
+            </div>
+            <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-150"
+            >
+                <LogOut className="w-4 h-4 mr-2" />
+                Cerrar Sesión
+            </button>
+        </div>
+      </aside>
+
+      {/* Contenido Principal */}
+      <main className="flex-grow overflow-y-auto">
+        {/* Header */}
+        <header className="bg-white shadow-sm p-4 sticky top-0 z-10 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-semibold text-gray-800 md:hidden">InnovaPyme PMV</h1>
+            
+            {/* Botón de Acción Principal */}
+            {currentView === 'projects' && canCreateProject && (
+                <button
+                    onClick={onCreateProjectClick}
+                    className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150"
+                >
+                    <PlusCircle className="w-5 h-5 mr-2" />
+                    Crear Proyecto
+                </button>
+            )}
+            
+            {currentView === 'backlog' && canCreatePbi && (
+                <button
+                    onClick={onCreatePbiClick}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150"
+                >
+                    <PlusCircle className="w-5 h-5 mr-2" />
+                    Crear PBI
+                </button>
+            )}
+            
+            {/* User Info Mobile/Tablet */}
+            <div className="flex items-center md:hidden">
+              <span className="text-sm text-gray-600 mr-3">{user.username} ({user.role.charAt(0)})</span>
+              <button onClick={handleLogout} className="text-red-500 hover:text-red-700 p-1 rounded-full bg-gray-100">
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Contenido de la Vista */}
+        {children}
+      </main>
+    </div>
+  );
+};
+
+
+// 4.2.3 Sistema de Autenticación - Login (Sin cambios)
+const LoginScreen = ({ handleLogin }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const credentials = {
+    // Simulando credenciales: Nombre de usuario = Rol
+    'admin': { role: ROLES.ADMIN, pass: 'admin123' },
+    'gerente': { role: ROLES.MANAGER, pass: 'manager123' },
+    'miembro': { role: ROLES.MEMBER, pass: 'member123' },
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const userCreds = credentials[username.toLowerCase()];
+    
+    // Simulación de Login Seguro (validación simple en este PMV)
+    if (userCreds && userCreds.pass === password) {
+      handleLogin({ username, role: userCreds.role });
+    } else {
+      setError('Credenciales inválidas. Intente con: admin/admin123, gerente/manager123 o miembro/member123');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 font-sans">
+      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm border border-gray-200">
+        <h2 className="text-3xl font-bold text-center mb-6 text-blue-600">InnovaPyme PMV</h2>
+        <p className="text-center text-gray-600 mb-8">Dashboard de Control Digital</p>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Usuario (e.g., admin, gerente, miembro)</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="admin / gerente / miembro"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Contraseña</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="********"
+            />
+          </div>
+          
+          {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
+
+          <button
+            type="submit"
+            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 transform hover:scale-[1.01]"
+          >
+            Iniciar Sesión
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+// 4.1. Descripción del PMV - Componente Principal (ACTUALIZADO)
+export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [projects, setProjects] = useState(initialProjects);
+  const [productBacklog, setProductBacklog] = useState(initialProductBacklog);
+  const [currentView, setCurrentView] = useState('dashboard');
+  
+  // Estado para formularios modales de proyectos
+  const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState(null);
+  
+  // Estado para formularios modales de PBIs
+  const [isPbiFormOpen, setIsPbiFormOpen] = useState(false);
+  const [pbiToEdit, setPbiToEdit] = useState(null);
+  
+  // Estado para la confirmación de eliminación (general)
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null); // {id: 1, type: 'project'/'pbi'}
+
+  // Funciones de Autenticación
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setCurrentView('dashboard');
+  };
+  
+  // Lógica de permisos
+  const canCreateOrEdit = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.MANAGER;
+  const canDelete = currentUser?.role === ROLES.ADMIN;
+  const canManageBacklog = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.MANAGER;
+
+
+  // --- CRUD Proyectos ---
+  const handleSaveProject = (newProjectData) => {
+    const parsedData = {
+        ...newProjectData,
+        budget: Number(newProjectData.budget),
+        totalEffort: Number(newProjectData.totalEffort),
+    };
+      
+    if (parsedData.id) {
+      setProjects(prev => prev.map(p => p.id === parsedData.id ? { ...p, ...parsedData } : p));
+    } else {
+      setProjects(prev => [
+        { ...parsedData, id: getNextId(), effortCompleted: 0, satisfaction: 0 },
+        ...prev
+      ]);
+    }
+    setIsProjectFormOpen(false);
+    setProjectToEdit(null);
+  };
+  
+  const handleEditProject = (project) => {
+      if (canCreateOrEdit) {
+          setProjectToEdit(project);
+          setIsProjectFormOpen(true);
+      } else {
+          console.log("Permiso denegado para editar proyecto.");
+      }
+  };
+  
+  // --- CRUD Product Backlog Items (PBI) ---
+  const handleSavePbi = (newPbiData) => {
+    const isNew = !newPbiData.id;
+    if (isNew) {
+        // En un nuevo PBI, darle el rank siguiente al último elemento
+        const maxRank = productBacklog.reduce((max, pbi) => Math.max(max, pbi.rank), 0);
+        newPbiData.rank = maxRank + 1;
+    }
+      
+    if (!isNew) {
+      // Actualizar
+      setProductBacklog(prev => prev.map(pbi => pbi.id === newPbiData.id ? { ...pbi, ...newPbiData } : pbi));
+    } else {
+      // Crear
+      setProductBacklog(prev => [
+        { ...newPbiData, id: getNextPbiId() },
+        ...prev
+      ]);
+    }
+    setIsPbiFormOpen(false);
+    setPbiToEdit(null);
+  };
+
+  const handleEditPbi = (pbi) => {
+      if (canManageBacklog) {
+          setPbiToEdit(pbi);
+          setIsPbiFormOpen(true);
+      } else {
+          console.log("Permiso denegado para editar PBI.");
+      }
+  };
+
+  // Función de Reordenamiento del Backlog (Función clave del PO)
+  const handleReorderPbi = useCallback((pbiId, direction) => {
+    setProductBacklog(prevPbis => {
+        // Clonar y ordenar la lista para garantizar que los ranks sean contiguos
+        const sortedPbis = [...prevPbis].sort((a, b) => a.rank - b.rank);
+        const currentIndex = sortedPbis.findIndex(p => p.id === pbiId);
+
+        if (currentIndex === -1) return prevPbis;
+
+        let newIndex = currentIndex;
+        if (direction === 'up' && currentIndex > 0) {
+            newIndex = currentIndex - 1;
+        } else if (direction === 'down' && currentIndex < sortedPbis.length - 1) {
+            newIndex = currentIndex + 1;
+        } else {
+            return prevPbis; // No hay cambio
+        }
+
+        // Intercambiar elementos en el array ordenado
+        [sortedPbis[currentIndex], sortedPbis[newIndex]] = [sortedPbis[newIndex], sortedPbis[currentIndex]];
+
+        // Reasignar los ranks basados en la nueva posición (1, 2, 3, ...)
+        const newRankedPbis = sortedPbis.map((pbi, index) => ({
+            ...pbi,
+            rank: index + 1 // El índice + 1 es el nuevo rank
+        }));
+
+        return newRankedPbis;
+    });
+  }, []);
+  
+  // --- Funciones de Eliminación con Modal ---
+  const handleDeleteItemClick = (id, type) => {
+      if (!canDelete && type === 'project') {
+          console.log("Permiso denegado para eliminar proyecto.");
+          return;
+      }
+      if (!canManageBacklog && type === 'pbi') {
+          console.log("Permiso denegado para eliminar PBI.");
+          return;
+      }
+      
+      setItemToDelete({ id, type });
+      setIsConfirmModalOpen(true);
+  };
+  
+  const confirmDelete = () => {
+      if (!itemToDelete) return;
+      
+      const { id, type } = itemToDelete;
+
+      if (type === 'project') {
+          setProjects(prev => prev.filter(p => p.id !== id));
+          // Opcional: eliminar PBIs asociados
+          setProductBacklog(prev => prev.filter(pbi => pbi.projectId !== id));
+      } else if (type === 'pbi') {
+          setProductBacklog(prev => {
+            const updatedPbis = prev.filter(pbi => pbi.id !== id);
+            // Reajustar ranks de los elementos restantes
+            return updatedPbis.sort((a, b) => a.rank - b.rank).map((pbi, index) => ({ ...pbi, rank: index + 1 }));
+          });
+      }
+
+      setIsConfirmModalOpen(false);
+      setItemToDelete(null);
+  };
+  
+  const cancelDelete = () => {
+      setIsConfirmModalOpen(false);
+      setItemToDelete(null);
+  };
+  
+  // Mensaje para el modal de confirmación
+  const deleteModalMessage = itemToDelete 
+      ? (itemToDelete.type === 'project' 
+          ? `¿Está seguro de que desea eliminar el proyecto con ID ${itemToDelete.id}? Esta acción también eliminará sus PBIs asociados y es irreversible.`
+          : `¿Está seguro de que desea eliminar el PBI con ID ${itemToDelete.id}? Esta acción es irreversible.`)
+      : "";
+
+
+  if (!isAuthenticated) {
+    return <LoginScreen handleLogin={handleLogin} />;
+  }
+
+  return (
+    <DashboardLayout
+      user={currentUser}
+      handleLogout={handleLogout}
+      currentView={currentView}
+      setCurrentView={setCurrentView}
+      onCreateProjectClick={() => { setProjectToEdit(null); setIsProjectFormOpen(true); }}
+      onCreatePbiClick={() => { setPbiToEdit(null); setIsPbiFormOpen(true); }} // Nuevo handler
+      canCreateProject={canCreateOrEdit}
+    >
+      
+      {/* Modales de Proyectos */}
+      {isProjectFormOpen && (
+        <ProjectForm
+          projectToEdit={projectToEdit}
+          onSave={handleSaveProject}
+          onCancel={() => setIsProjectFormOpen(false)}
+        />
+      )}
+      
+      {/* Modales de PBIs */}
+      {isPbiFormOpen && (
+        <PbiForm
+          pbiToEdit={pbiToEdit}
+          projects={projects}
+          onSave={handleSavePbi}
+          onCancel={() => setIsPbiFormOpen(false)}
+        />
+      )}
+      
+      {/* Modal de Confirmación General */}
+      <ConfirmationModal 
+          title="Confirmar Eliminación"
+          message={deleteModalMessage}
+          isOpen={isConfirmModalOpen}
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+      />
+
+      {currentView === 'dashboard' && <DashboardExecutive projects={projects} productBacklog={productBacklog} />}
+      
+      {currentView === 'projects' && (
+        <ProjectList 
+          projects={projects} 
+          role={currentUser.role} 
+          onEditProject={handleEditProject}
+          onDeleteProject={(id) => handleDeleteItemClick(id, 'project')} 
+        />
+      )}
+      
+      {currentView === 'backlog' && (
+        <ProductBacklogManagement
+          productBacklog={productBacklog}
+          projects={projects}
+          role={currentUser.role}
+          onEditPbi={handleEditPbi}
+          onDeletePbi={(id) => handleDeleteItemClick(id, 'pbi')}
+          onCreatePbiClick={() => { setPbiToEdit(null); setIsPbiFormOpen(true); }}
+          onReorderPbi={handleReorderPbi} // Nueva función de reordenamiento
+        />
+      )}
+      
+      {currentView === 'reports' && (
+        <ValueReports 
+          projects={projects} 
+          productBacklog={productBacklog} 
+        />
+      )}
+      
+      {/* Mensaje de Permiso (Simulación para Miembro de Equipo) */}
+      {(currentView === 'projects' || currentView === 'backlog' || currentView === 'reports') && currentUser.role === ROLES.MEMBER && (
+          <div className="p-4 bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500 mx-4 md:mx-8 rounded-lg mt-4">
+              <p className="font-semibold">Vista de Miembro de Equipo:</p>
+              <p className="text-sm">Solo tiene permisos de visualización. Las acciones de gestión (Creación/Edición/Eliminación) están deshabilitadas.</p>
+          </div>
+      )}
+    </DashboardLayout>
+  );
+}
